@@ -1264,6 +1264,53 @@ class Application(object):
                         links.add(link)
         return funcs, links
 
+    def _get_function_implementation(self, func: Callable[..., Any], func_name: str) -> Dict[str, Any]:
+        """
+        Extract function implementation details.
+        
+        Parameters
+        ----------
+        func : Callable
+            The function to analyze
+        func_name : str
+            Name of the function
+            
+        Returns
+        -------
+        Dict[str, Any]
+            Implementation details including source code, file location, etc.
+        """
+        if not func:
+            return {
+                'implementation': f"# Function {func_name} not found",
+                'source_file': None,
+                'line_number': None,
+            }
+        
+        try:
+            # Get source code
+            source = inspect.getsource(func)
+            # Clean up indentation
+            source = textwrap.dedent(source)
+            
+            # Get file and line info
+            source_file = inspect.getfile(func)
+            line_number = inspect.getsourcelines(func)[1]
+            
+            return {
+                'implementation': source,
+                'source_file': source_file,
+                'line_number': line_number,
+            }
+            
+        except (OSError, TypeError) as e:
+            # Handle cases where source is not available (REPL, compiled, etc.)
+            return {
+                'implementation': f"# Source code not available for {func_name}\n# Reason: {str(e)}",
+                'source_file': getattr(func, '__module__', 'unknown'),
+                'line_number': None,
+            }
+
     def get_function_info(
         self,
         func_name: Optional[str] = None,
@@ -1321,12 +1368,17 @@ class Application(object):
                     if a.get('default', no_default) is not no_default:
                         returns[-1]['default'] = a['default']
 
+                func_name_str = key.decode('utf-8') if isinstance(key, bytes) else key
+                original_func = self.external_functions.get(func_name_str)
+                implementation_info = self._get_function_implementation(original_func, func_name_str)
+
                 sql = sql_map.get(sig['name'], '')
                 functions[sig['name']] = dict(
                     args=args,
                     returns=returns,
                     function_type=info['function_type'],
                     sql_statement=sql,
+                    **implementation_info,
                 )
 
         return functions
