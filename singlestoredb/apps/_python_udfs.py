@@ -41,8 +41,6 @@ async def run_udf_app(
 
     base_url = generate_base_url(app_config)
 
-# something
-
     udf_suffix = ''
     if app_config.running_interactively:
         udf_suffix = '_test'

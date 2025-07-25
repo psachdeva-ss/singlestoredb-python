@@ -1264,6 +1264,44 @@ class Application(object):
                         links.add(link)
         return funcs, links
 
+    def _extract_sample_usage(self, docstring: str) -> Optional[str]:
+        """
+        Extract sample usage from docstring that starts with 'SAMPLE:'.
+        
+        Parameters
+        ----------
+        docstring : str
+            The function's docstring
+            
+        Returns
+        -------
+        Optional[str]
+            The sample usage string if found, None otherwise
+        """
+        if not docstring:
+            return None
+        
+        lines = docstring.strip().split('\n')
+        sample_lines = []
+        in_sample_block = False
+        
+        for line in lines:
+            stripped_line = line.strip()
+            prefix = 'SAMPLE:'
+            
+            # Check if line starts with SAMPLE:
+            if stripped_line.startswith(prefix):
+                in_sample_block = True
+                # Extract the part after SAMPLE:
+                sample_content = stripped_line[len(prefix)].strip()  # Remove 'SAMPLE:' prefix
+                if sample_content:
+                    sample_lines.append(sample_content)
+            elif in_sample_block:
+                # Continue collecting lines until we hit an empty line or end
+                if not stripped_line:
+                    break
+                sample_lines.append(stripped_line)
+
     def _get_function_implementation(self, func: Callable[..., Any], func_name: str) -> Dict[str, Any]:
         """
         Extract function implementation details.
@@ -1296,11 +1334,17 @@ class Application(object):
             # Get file and line info
             source_file = inspect.getfile(func)
             line_number = inspect.getsourcelines(func)[1]
+
+            # Extract docstring and sample usage
+            docstring = inspect.getdoc(func)
+            sample_usage = self._extract_sample_usage(docstring) if docstring else None
             
             return {
                 'implementation': source,
                 'source_file': source_file,
                 'line_number': line_number,
+                'docstring': docstring,
+                'sample_usage': sample_usage,
             }
             
         except (OSError, TypeError) as e:
@@ -1309,6 +1353,8 @@ class Application(object):
                 'implementation': f"# Source code not available for {func_name}\n# Reason: {str(e)}",
                 'source_file': getattr(func, '__module__', 'unknown'),
                 'line_number': None,
+                'docstring': None,
+                'sample_usage': None,
             }
 
     def get_function_info(
