@@ -1266,7 +1266,7 @@ class Application(object):
 
     def _extract_sample_usage(self, docstring: str) -> Optional[str]:
         """
-        Extract sample usage from docstring that starts with 'SAMPLE:'.
+        Extract sample usage from NumPy-style docstring Examples section or legacy SAMPLE: prefix.
         
         Parameters
         ----------
@@ -1281,6 +1281,104 @@ class Application(object):
         if not docstring:
             return None
         
+        # Try to use numpydoc parser first
+        try:
+            import numpydoc.docscrape as nds
+            parsed = nds.FunctionDoc(None, doc=docstring)
+            
+            # Extract Examples section
+            if hasattr(parsed, 'Examples') and parsed.Examples:
+                examples_lines = []
+                for example in parsed.Examples:
+                    if hasattr(example, '__iter__') and not isinstance(example, str):
+                        examples_lines.extend(str(line) for line in example)
+                    else:
+                        examples_lines.append(str(example))
+                
+                if examples_lines:
+                    return '\n'.join(examples_lines).strip()
+        except ImportError:
+            # numpydoc not available, fall back to manual parsing
+            pass
+        except Exception:
+            # If numpydoc parsing fails, fall back to manual parsing
+            pass
+        
+        # Manual parsing for Examples section (NumPy-style)
+        examples_content = self._manual_parse_examples_section(docstring)
+        if examples_content:
+            return examples_content
+        
+        # Fallback to legacy SAMPLE: prefix parsing
+        return self._legacy_sample_parsing(docstring)
+    
+    def _manual_parse_examples_section(self, docstring: str) -> Optional[str]:
+        """
+        Manually parse Examples section from NumPy-style docstring.
+        
+        Parameters
+        ----------
+        docstring : str
+            The function's docstring
+            
+        Returns
+        -------
+        Optional[str]
+            The examples content if found, None otherwise
+        """
+        lines = docstring.strip().split('\n')
+        examples_lines = []
+        in_examples_section = False
+        examples_started = False
+        
+        for i, line in enumerate(lines):
+            stripped_line = line.strip()
+            
+            # Look for Examples section header
+            if stripped_line.lower() == 'examples':
+                # Check if next line is underline (dashes)
+                if i + 1 < len(lines) and lines[i + 1].strip().startswith('-'):
+                    in_examples_section = True
+                    continue
+            elif in_examples_section:
+                # Check if we've hit another section (word followed by line of dashes)
+                if (stripped_line and 
+                    not stripped_line.startswith('-') and 
+                    i + 1 < len(lines) and 
+                    lines[i + 1].strip().startswith('-')):
+                    break
+                
+                # Skip the underline
+                if stripped_line.startswith('-') and not examples_started:
+                    examples_started = True
+                    continue
+                
+                if examples_started:
+                    # Collect all content in Examples section
+                    examples_lines.append(line.rstrip())
+        
+        if examples_lines:
+            # Remove trailing empty lines
+            while examples_lines and not examples_lines[-1].strip():
+                examples_lines.pop()
+            return '\n'.join(examples_lines) if examples_lines else None
+        
+        return None
+    
+    def _legacy_sample_parsing(self, docstring: str) -> Optional[str]:
+        """
+        Legacy parsing for SAMPLE: prefix format.
+        
+        Parameters
+        ----------
+        docstring : str
+            The function's docstring
+            
+        Returns
+        -------
+        Optional[str]
+            The sample usage string if found, None otherwise
+        """
         lines = docstring.strip().split('\n')
         sample_lines = []
         in_sample_block = False
@@ -1293,7 +1391,7 @@ class Application(object):
             if stripped_line.startswith(prefix):
                 in_sample_block = True
                 # Extract the part after SAMPLE:
-                sample_content = stripped_line[len(prefix)].strip()  # Remove 'SAMPLE:' prefix
+                sample_content = stripped_line[len(prefix):].strip()  # Remove 'SAMPLE:' prefix
                 if sample_content:
                     sample_lines.append(sample_content)
             elif in_sample_block:
@@ -1301,6 +1399,8 @@ class Application(object):
                 if not stripped_line:
                     break
                 sample_lines.append(stripped_line)
+        
+        return '\n'.join(sample_lines) if sample_lines else None
 
     def _get_function_implementation(self, func: Callable[..., Any], func_name: str) -> Dict[str, Any]:
         """
