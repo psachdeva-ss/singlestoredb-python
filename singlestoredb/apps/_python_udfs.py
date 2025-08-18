@@ -18,6 +18,7 @@ MAX_UDFS_LIMIT = 10
 
 
 async def run_udf_app(
+    app_mode: str = 'managed',
     log_level: str = 'error',
     kill_existing_app_server: bool = True,
 ) -> UdfConnectionInfo:
@@ -47,7 +48,7 @@ async def run_udf_app(
     udf_suffix = ''
     if app_config.running_interactively:
         udf_suffix = '_test'
-    app = Application(url=base_url, app_mode='managed', name_suffix=udf_suffix)
+    app = Application(url=base_url, app_mode=app_mode, name_suffix=udf_suffix)
 
     if not app.endpoints:
         raise ValueError('You must define at least one function.')
